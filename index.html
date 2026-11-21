@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pong</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #10131a;
+      color: #f5f7fa;
+      font-family: system-ui, sans-serif;
+    }
+
+    .game {
+      width: min(90vw, 800px);
+      text-align: center;
+    }
+
+    h1 { margin: 0 0 12px; }
+
+    canvas {
+      display: block;
+      width: 100%;
+      background: #080a0f;
+      border: 2px solid #394150;
+      border-radius: 8px;
+      cursor: crosshair;
+    }
+
+    p { color: #b7c0ce; }
+  </style>
+</head>
+<body>
+  <main class="game">
+    <h1>Pong</h1>
+    <canvas id="board" width="800" height="450" aria-label="Pong game"></canvas>
+    <p>Move your mouse over the game or use ↑ and ↓ to control the left paddle.</p>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("board");
+    const ctx = canvas.getContext("2d");
+
+    const paddleWidth = 12;
+    const paddleHeight = 90;
+    const paddleSpeed = 7;
+
+    const player = { x: 24, y: 180, score: 0 };
+    const computer = { x: canvas.width - 36, y: 180, score: 0 };
+    const ball = { x: canvas.width / 2, y: canvas.height / 2, radius: 8, vx: 5, vy: 3 };
+
+    const keys = new Set();
+
+    function resetBall(direction) {
+      ball.x = canvas.width / 2;
+      ball.y = canvas.height / 2;
+      ball.vx = 5 * direction;
+      ball.vy = (Math.random() * 4) - 2;
+    }
+
+    function movePlayer() {
+      if (keys.has("ArrowUp")) player.y -= paddleSpeed;
+      if (keys.has("ArrowDown")) player.y += paddleSpeed;
+      player.y = Math.max(0, Math.min(canvas.height - paddleHeight, player.y));
+    }
+
+    function moveComputer() {
+      // The computer tracks the ball, but moves more slowly than it.
+      const target = ball.y - paddleHeight / 2;
+      const difference = target - computer.y;
+      computer.y += Math.sign(difference) * Math.min(Math.abs(difference), 4.2);
+      computer.y = Math.max(0, Math.min(canvas.height - paddleHeight, computer.y));
+    }
+
+    function hitPaddle(paddle) {
+      return (
+        ball.x + ball.radius > paddle.x &&
+        ball.x - ball.radius < paddle.x + paddleWidth &&
+        ball.y + ball.radius > paddle.y &&
+        ball.y - ball.radius < paddle.y + paddleHeight
+      );
+    }
+
+    function update() {
+      movePlayer();
+      moveComputer();
+
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      // Bounce off the top and bottom walls.
+      if (ball.y - ball.radius <= 0 || ball.y + ball.radius >= canvas.height) {
+        ball.vy *= -1;
+        ball.y = Math.max(ball.radius, Math.min(canvas.height - ball.radius, ball.y));
+      }
+
+      // Bounce off paddles and angle the ball based on where it hits.
+      if (ball.vx < 0 && hitPaddle(player)) {
+        ball.x = player.x + paddleWidth + ball.radius;
+        ball.vx = Math.abs(ball.vx) * 1.05;
+        ball.vy = ((ball.y - (player.y + paddleHeight / 2)) / (paddleHeight / 2)) * 5;
+      } else if (ball.vx > 0 && hitPaddle(computer)) {
+        ball.x = computer.x - ball.radius;
+        ball.vx = -Math.abs(ball.vx) * 1.05;
+        ball.vy = ((ball.y - (computer.y + paddleHeight / 2)) / (paddleHeight / 2)) * 5;
+      }
+
+      // Award a point when the ball passes a paddle, then serve toward the player who missed.
+      if (ball.x + ball.radius < 0) {
+        computer.score++;
+        resetBall(-1);
+      } else if (ball.x - ball.radius > canvas.width) {
+        player.score++;
+        resetBall(1);
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Dashed center line.
+      ctx.strokeStyle = "#394150";
+      ctx.setLineDash([8, 10]);
+      ctx.beginPath();
+      ctx.moveTo(canvas.width / 2, 0);
+      ctx.lineTo(canvas.width / 2, canvas.height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Scoreboard.
+      ctx.fillStyle = "#f5f7fa";
+      ctx.font = "bold 36px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(player.score, canvas.width / 2 - 60, 50);
+      ctx.fillText(computer.score, canvas.width / 2 + 60, 50);
+
+      // Paddles and ball.
+      ctx.fillRect(player.x, player.y, paddleWidth, paddleHeight);
+      ctx.fillRect(computer.x, computer.y, paddleWidth, paddleHeight);
+
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    canvas.addEventListener("mousemove", (event) => {
+      const bounds = canvas.getBoundingClientRect();
+      const scaleY = canvas.height / bounds.height;
+      player.y = (event.clientY - bounds.top) * scaleY - paddleHeight / 2;
+      player.y = Math.max(0, Math.min(canvas.height - paddleHeight, player.y));
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        event.preventDefault();
+        keys.add(event.key);
+      }
+    });
+
+    window.addEventListener("keyup", (event) => keys.delete(event.key));
+
+    gameLoop();
+  </script>
+</body>
+</html>
